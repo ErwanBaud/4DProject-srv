@@ -10,6 +10,7 @@ Serveur::Serveur()
     connect(boutonQuitter, SIGNAL(clicked()), qApp, SLOT(quit()));
     connect(boutonWho, SIGNAL(clicked()), this, SLOT(whoIsAlive()));
     connect(boutonStart, SIGNAL(clicked()), this, SLOT(startClient()));
+    connect(boutonSend, SIGNAL(clicked()), this, SLOT(envoyerTousClients()));
 
 
     //QVBoxLayout *layout = new QVBoxLayout;
@@ -24,32 +25,30 @@ Serveur::Serveur()
 
     // Initialisation des composants pour la gestion des iamALive reçus
     udpBroadSocket = new QUdpSocket(this);
-    if ( (udpBroadSocket->bind(appPort, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) )
-        listeMessages->append(tr("     Socket UDP ready."));
-    else
+    if ( !(udpBroadSocket->bind(appPort, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) )
         listeMessages->append(tr("     Erreur socket UDP."));
+    else
+        //udpBroadSocket->bind(QHostAddress("127.0.0.1"), appPort);
+        connect(udpBroadSocket, SIGNAL(readyRead()), this, SLOT(clientAlive()));
 
-    //udpBroadSocket->bind(QHostAddress("127.0.0.1"), appPort);
-    connect(udpBroadSocket, SIGNAL(readyRead()), this, SLOT(clientAlive()));
+        // Si le serveur a été démarré correctement
+        host = QHostAddress("127.0.0.1");
+        port = udpBroadSocket->localPort();
+        hostPort = host.toString() + ":" + QString::number(port);
 
-    // Si le serveur a été démarré correctement
-    host = QHostAddress("127.0.0.1");
-    port = udpBroadSocket->localPort();
-    hostPort = host.toString() + ":" + QString::number(port);
+        // Mise à jour des labels de l'interface
+        serveurIP->setText(host.toString());
+        serveurPort->setText(QString::number(appPort));
 
-    // Mise à jour des labels de l'interface
-    serveurIP->setText(host.toString());
-    serveurPort->setText(QString::number(appPort));
+        listeMessages->append(tr("Le serveur a ete demarre sur le port <strong>") + QString::number(port));
 
-    listeMessages->append(tr("Le serveur a ete demarre sur le port <strong>") + QString::number(port));
+        // Initialisation des composants du deadCollector
+        tDeadCollector = new QTimer();
+        tDeadCollector->setInterval(3000);
+        connect(tDeadCollector, SIGNAL(timeout()), this, SLOT(deadCollector()));
+        tDeadCollector->start();
 
-    // Initialisation des composants du deadCollector
-    tDeadCollector = new QTimer();
-    tDeadCollector->setInterval(3000);
-    connect(tDeadCollector, SIGNAL(timeout()), this, SLOT(deadCollector()));
-    tDeadCollector->start();
-
-    tailleMessage = 0;
+        tailleMessage = 0;
 }
 
 
@@ -152,13 +151,20 @@ void Serveur::deadCollector()
  *  */
 void Serveur::startClient()
 {
-    QString program = "C:\\Users\\Erwan\\ISIMA\\3A\\Projet\\Qt\\deploy\\cltCore.exe";
+    QString program = QDir::home().filePath("4DProject/deploy/cltCore.exe");
     QProcess *myProcess = new QProcess(this);
-    myProcess->startDetached(program);
-
-    listeMessages->append("");
-    listeMessages->append("Client démarré !");
-    listeMessages->append("");
+    if(myProcess->startDetached(program))
+    {
+        listeMessages->append("");
+        listeMessages->append("Client démarré !");
+        listeMessages->append("");
+    }
+    else
+    {
+        listeMessages->append("");
+        listeMessages->append("Client non démarré !");
+        listeMessages->append("");
+    }
 }
 
 
@@ -173,7 +179,7 @@ void Serveur::connectTo(Client *client)
         client->toClient->waitForConnected();
         client->status = 2;
         listeMessages->append("    Connecte a " + client->hostPort);
-        //connect(client->toClient, SIGNAL(readyRead()), this, SLOT(donneesRecues()));
+        connect(client->toClient, SIGNAL(readyRead()), this, SLOT(receptionClient()));
         connect(client->toClient, SIGNAL(disconnected()), this, SLOT(deconnexionClient()));
 }
 
@@ -192,6 +198,7 @@ void Serveur::deconnexionClient()
     foreach(Client *c, clients)
         if( c->toClient == socket )
         {
+            c->status = 1;
             c->toClient->close();
             c->toClient->deleteLater();
             listeMessages->append("    /!\\" + c->hostPort + " vient de se deconnecter.");
@@ -200,13 +207,35 @@ void Serveur::deconnexionClient()
 }
 
 
-/*
 
-void Serveur::donneesRecues()
+/* Envoi d'un message a tous les clients
+ * */
+void Serveur::envoyerTousClients()
 {
-    // 1 : on reçoit un paquet (ou un sous-paquet) d'un des clients
+    // Préparation du paquet
+    QByteArray paquet;
+    QDataStream out(&paquet, QIODevice::WriteOnly);
 
-    // On détermine quel client envoie le message (recherche du QTcpSocket du client)
+    out << (quint16) 0; // On écrit 0 au début du paquet pour réserver la place pour écrire la taille
+    out << hostPort << QTime::currentTime() << QString("Coucou !");
+    out.device()->seek(0); // On se replace au début du paquet
+    out << (quint16) (paquet.size() - sizeof(quint16)); // On écrase le 0 qu'on avait réservé par la longueur du message
+
+
+    // Envoi du paquet préparé à tous les clients connectés au serveur
+    for (int i = 0; i < clients.size(); i++)
+    {
+        listeMessages->append("Envoye a : " + clients[i]->hostPort);
+        clients[i]->toClient->write(paquet);
+    }
+
+}
+
+
+/* Reception de données provenant d'un client
+ * */
+void Serveur::receptionClient()
+{
     QTcpSocket *socket = qobject_cast<QTcpSocket *>(sender());
     if (socket == 0) // Si par hasard on n'a pas trouvé le client à l'origine du signal, on arrête la méthode
         return;
@@ -234,9 +263,6 @@ void Serveur::donneesRecues()
     in >> time;
     in >> messageRecu;
 
-
-    // 2 : on renvoie le message à tous les clients
-    //envoyerATous(hostPort, time, messageRecu);
     listeMessages->append(time.toString() + " - Recu de " + sender + " : " + messageRecu);
 
     // 3 : remise de la taille du message à 0 pour permettre la réception des futurs messages
@@ -244,26 +270,7 @@ void Serveur::donneesRecues()
 }
 
 
-void Serveur::envoyerATous(const QString hostPort, const QTime time, const QString &message)
-{
-    // Préparation du paquet
-    QByteArray paquet;
-    QDataStream out(&paquet, QIODevice::WriteOnly);
-
-    out << (quint16) 0; // On écrit 0 au début du paquet pour réserver la place pour écrire la taille
-    out << hostPort << time << message;
-    out.device()->seek(0); // On se replace au début du paquet
-    out << (quint16) (paquet.size() - sizeof(quint16)); // On écrase le 0 qu'on avait réservé par la longueur du message
-
-
-    // Envoi du paquet préparé à tous les clients connectés au serveur
-    for (int i = 0; i < clients.size(); i++)
-    {
-        clients[i]->write(paquet);
-    }
-
-}
-
+/*
 void Serveur::envoyerATous(const QString &message)
 {
     // Préparation du paquet

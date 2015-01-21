@@ -20,16 +20,18 @@ class Serveur : public QWidget, private Ui::Serveur
 
         Client *clientIsIn(Client *client, QList<Client *> &clients); // Vérifie la présence d'un client dans la liste
         //void envoyerATous(const QString &message);
-        //void envoyerATous(const QString hostPort, const QTime time, const QString &message);
         //void envoyerAuxAutres(const QString &message);
 
     private slots:
         void clientAlive(); // Slot executé lors de la reception d'un iamAlive
         void whoIsAlive(); // Slot executé lors d'un clic sur le bouton whoIsAlive
         void deadCollector(); // Slot executé périodiquement pour modifier le statut des processus client n'emettant plus
+
         void startClient(); // Slot executé lors d'un clic sur le bouton lancer
-        //void donneesRecues(); // Slot executé lors de la reception de données provenant d'un client
         void deconnexionClient(); // Slot executé lors de la deconnexion de la socket d'un client
+
+        void envoyerTousClients(); // Envoi d'un message a tous les client connectes
+        void receptionClient(); // Slot executé lors de la reception de données provenant d'un client
 
     private:
 
