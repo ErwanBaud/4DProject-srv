@@ -3,10 +3,9 @@
 
 #include <QtWidgets>
 #include <QtNetwork>
-#include <set>
+#include <QSignalMapper>
 #include "ui_Serveur.h"
 #include "Client.h"
-
 
 class Serveur : public QWidget, private Ui::Serveur
 {
@@ -14,6 +13,14 @@ class Serveur : public QWidget, private Ui::Serveur
 
 
     public:
+
+        enum Ordre
+        {
+            START,
+            PAUSE,
+            STOP
+        };
+
         Serveur();
         QString hostPort; // Identité du serveur
         QList<Client *> clients; // Liste des processus clients
@@ -30,7 +37,7 @@ class Serveur : public QWidget, private Ui::Serveur
         void startClient(); // Slot executé lors d'un clic sur le bouton lancer
         void deconnexionClient(); // Slot executé lors de la deconnexion de la socket d'un client
 
-        void envoyerTousClients(); // Envoi d'un message a tous les client connectes
+        void envoyerTousClients(int); // Envoi d'un message a tous les client connectes
         void receptionClient(); // Slot executé lors de la reception de données provenant d'un client
 
     private:
@@ -39,6 +46,7 @@ class Serveur : public QWidget, private Ui::Serveur
         quint16 port; // Port du serveur
         quint16 appPort; // Port de l'appli
 
+        QSignalMapper *signalMapper;
 
         QTimer *tDeadCollector; // timer pour le slot deadCollector
 

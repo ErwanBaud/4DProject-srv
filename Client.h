@@ -2,11 +2,21 @@
 #define CLIENT_H
 #include <QtNetwork>
 
+
+
 /* Client : Modelisation d'un processus client pour le serveur
  * */
 class Client
 {
     public:
+
+        enum Ordre
+        {
+            START,
+            PAUSE,
+            STOP
+        };
+
         Client();
         Client(QString h, QString p);
 

@@ -7,18 +7,24 @@ Serveur::Serveur()
 {
     setupUi(this);
 
+    boutonStart->setEnabled(true);
+    boutonPause->setEnabled(false);
+    boutonStop->setEnabled(false);
+
+    signalMapper = new QSignalMapper(this);
+
     connect(boutonQuitter, SIGNAL(clicked()), qApp, SLOT(quit()));
     connect(boutonWho, SIGNAL(clicked()), this, SLOT(whoIsAlive()));
-    connect(boutonStart, SIGNAL(clicked()), this, SLOT(startClient()));
-    connect(boutonSend, SIGNAL(clicked()), this, SLOT(envoyerTousClients()));
+    connect(boutonLancer, SIGNAL(clicked()), this, SLOT(startClient()));
 
+    connect(boutonStart, SIGNAL(clicked()), signalMapper, SLOT(map()));
+    signalMapper->setMapping(boutonStart, START);
+    connect(boutonPause, SIGNAL(clicked()), signalMapper, SLOT(map()));
+    signalMapper->setMapping(boutonPause, PAUSE);
+    connect(boutonStop, SIGNAL(clicked()), signalMapper, SLOT(map()));
+    signalMapper->setMapping(boutonStop, STOP);
 
-    //QVBoxLayout *layout = new QVBoxLayout;
-    //layout->addWidget(etatServeur);
-    //layout->addWidget(boutonQuitter);
-    //setLayout(layout);
-
-    //setWindowTitle(tr("ZeroChat - Serveur"));
+    connect(signalMapper, SIGNAL(mapped(int)), this, SLOT(envoyerTousClients(int)));
 
     // Démarrage du serveur
     appPort = 50885;
@@ -62,6 +68,8 @@ void Serveur::clientAlive()
     // Tant qu'il y a des paquets reçus
      while (udpBroadSocket->hasPendingDatagrams())
      {
+         listeMessages->append("Client alive.");
+
          QByteArray datagram;
          QList<QByteArray> mess;
          datagram.resize(udpBroadSocket->pendingDatagramSize());
@@ -73,6 +81,7 @@ void Serveur::clientAlive()
          // S'il n'y est pas
          if ( pClient == NULL )
          {
+             listeMessages->append("Absent.");
              client->status = 1; // Statut = alive
              client->timeOut = QTime::currentTime();
              connectTo(client);
@@ -80,8 +89,16 @@ void Serveur::clientAlive()
          }
          // S'il y est
          else
+         {
+             listeMessages->append("Present.");
              // Refresh timeout du client trouvé
              (*pClient).timeOut = QTime::currentTime();
+             if((*pClient).status == 0)
+             {
+                 (*pClient).status = 1; // Statut = alive
+                listeMessages->append((*pClient).hostPort + " retrouve.");
+             }
+         }
      }
 }
 
@@ -130,6 +147,7 @@ void Serveur::whoIsAlive()
     }
     listeMessages->append("");
 }
+
 
 
 /* Actualisation des statuts des clients
@@ -210,14 +228,38 @@ void Serveur::deconnexionClient()
 
 /* Envoi d'un message a tous les clients
  * */
-void Serveur::envoyerTousClients()
+void Serveur::envoyerTousClients(int pOrdre)
 {
+    switch (pOrdre)
+    {
+        case 0:
+            boutonStart->setEnabled(false);
+            boutonPause->setEnabled(true);
+            boutonStop->setEnabled(true);
+            break;
+
+        case 1:
+            boutonStart->setEnabled(false);
+            boutonPause->setEnabled(true);
+            boutonStop->setEnabled(true);
+            break;
+
+        case 2:
+            boutonStart->setEnabled(true);
+            boutonPause->setEnabled(false);
+            boutonStop->setEnabled(false);
+            break;
+    }
+
+
     // Préparation du paquet
     QByteArray paquet;
     QDataStream out(&paquet, QIODevice::WriteOnly);
 
+    Ordre ordre = (Ordre)pOrdre;
+
     out << (quint16) 0; // On écrit 0 au début du paquet pour réserver la place pour écrire la taille
-    out << hostPort << QTime::currentTime() << QString("Coucou !");
+    out << hostPort << QTime::currentTime() << ordre;
     out.device()->seek(0); // On se replace au début du paquet
     out << (quint16) (paquet.size() - sizeof(quint16)); // On écrase le 0 qu'on avait réservé par la longueur du message
 
@@ -225,11 +267,12 @@ void Serveur::envoyerTousClients()
     // Envoi du paquet préparé à tous les clients connectés au serveur
     for (int i = 0; i < clients.size(); i++)
     {
-        listeMessages->append("Envoye a : " + clients[i]->hostPort);
+        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a : " + clients[i]->hostPort);
         clients[i]->toClient->write(paquet);
     }
 
 }
+
 
 
 /* Reception de données provenant d'un client

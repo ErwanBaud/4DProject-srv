@@ -9,6 +9,7 @@ Client::Client(QString h, QString p)
     hostPort = host.toString() + ":" + QString::number(port);
 
     toClient = new QTcpSocket();
+    status = 0;
 }
 
 QHostAddress Client::getHost()

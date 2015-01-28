@@ -93,9 +93,23 @@
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_2">
      <item>
-      <widget class="QPushButton" name="boutonSend">
+      <widget class="QPushButton" name="boutonStart">
        <property name="text">
-        <string>Envoyer à Tous</string>
+        <string>Start</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="boutonPause">
+       <property name="text">
+        <string>Pause</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="boutonStop">
+       <property name="text">
+        <string>Stop</string>
        </property>
       </widget>
      </item>
@@ -113,7 +127,7 @@
       </spacer>
      </item>
      <item>
-      <widget class="QPushButton" name="boutonStart">
+      <widget class="QPushButton" name="boutonLancer">
        <property name="text">
         <string>Lancer</string>
        </property>
