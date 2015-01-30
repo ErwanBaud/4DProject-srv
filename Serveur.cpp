@@ -7,24 +7,29 @@ Serveur::Serveur()
 {
     setupUi(this);
 
-    boutonStart->setEnabled(true);
-    boutonPause->setEnabled(false);
+    boutonStart->setEnabled(false);
     boutonStop->setEnabled(false);
 
     signalMapper = new QSignalMapper(this);
 
     connect(boutonQuitter, SIGNAL(clicked()), qApp, SLOT(quit()));
-    connect(boutonWho, SIGNAL(clicked()), this, SLOT(whoIsAlive()));
+    connect(boutonWho, SIGNAL(clicked()), this, SLOT(clientsState()));
     connect(boutonLancer, SIGNAL(clicked()), this, SLOT(startClient()));
 
     connect(boutonStart, SIGNAL(clicked()), signalMapper, SLOT(map()));
     signalMapper->setMapping(boutonStart, START);
-    connect(boutonPause, SIGNAL(clicked()), signalMapper, SLOT(map()));
-    signalMapper->setMapping(boutonPause, PAUSE);
     connect(boutonStop, SIGNAL(clicked()), signalMapper, SLOT(map()));
     signalMapper->setMapping(boutonStop, STOP);
 
-    connect(signalMapper, SIGNAL(mapped(int)), this, SLOT(envoyerTousClients(int)));
+    connect(signalMapper, SIGNAL(mapped(int)), this, SLOT(envoyerOrdre(int)));
+
+    comboBoxSelection->InsertAlphabetically;
+    comboBoxSelection->AdjustToContents;
+    comboBoxSelection->setMinimumWidth(110);
+    comboBoxSelection->addItem("All");
+    connect(comboBoxSelection , SIGNAL(currentIndexChanged(int)), this, SLOT(refreshButtons(int)));
+
+
 
     // Démarrage du serveur
     appPort = 50885;
@@ -35,7 +40,7 @@ Serveur::Serveur()
         listeMessages->append(tr("     Erreur socket UDP."));
     else
         //udpBroadSocket->bind(QHostAddress("127.0.0.1"), appPort);
-        connect(udpBroadSocket, SIGNAL(readyRead()), this, SLOT(clientAlive()));
+        connect(udpBroadSocket, SIGNAL(readyRead()), this, SLOT(receptionBroadcast()));
 
         // Si le serveur a été démarré correctement
         host = QHostAddress("127.0.0.1");
@@ -63,43 +68,56 @@ Serveur::Serveur()
  * Ajout des nouveaux clients à la liste
  * Rafraichissement des timeout
  * */
-void Serveur::clientAlive()
+void Serveur::receptionBroadcast()
 {
     // Tant qu'il y a des paquets reçus
      while (udpBroadSocket->hasPendingDatagrams())
      {
-         listeMessages->append("Client alive.");
+        //listeMessages->append("Client alive.");
 
-         QByteArray datagram;
-         QList<QByteArray> mess;
-         datagram.resize(udpBroadSocket->pendingDatagramSize());
-         udpBroadSocket->readDatagram(datagram.data(), datagram.size());
-         mess = datagram.split('#');
-         Client *client = new Client(mess[0], mess[1]); // Création d'un objet client
-         Client *pClient = clientIsIn(client, clients); // Vérification de la présence dans la liste
+        QByteArray datagram;
+        QList<QByteArray> mess;
+        datagram.resize(udpBroadSocket->pendingDatagramSize());
+        udpBroadSocket->readDatagram(datagram.data(), datagram.size());
+        mess = datagram.split('#');
+        Client *client = new Client(mess[0], mess[1]); // Création d'un objet client
+        Client *pClient = clientIsIn(client, clients); // Vérification de la présence dans la liste
 
-         // S'il n'y est pas
-         if ( pClient == NULL )
-         {
-             listeMessages->append("Absent.");
-             client->status = 1; // Statut = alive
+        bool b = (mess[3] == "1" ? true : false);
+
+        // S'il n'y est pas
+        if ( pClient == NULL )
+        {
+             //listeMessages->append("Absent.");
+             client->alive = 1; // Statut = alive
+             client->state = b;
              client->timeOut = QTime::currentTime();
              connectTo(client);
              clients.append(client);
-         }
-         // S'il y est
-         else
-         {
-             listeMessages->append("Present.");
-             // Refresh timeout du client trouvé
-             (*pClient).timeOut = QTime::currentTime();
-             if((*pClient).status == 0)
-             {
-                 (*pClient).status = 1; // Statut = alive
+
+             // Ajout dans la combobox
+             comboBoxSelection->addItem(client->hostPort);
+        }
+        // S'il y est
+        else
+        {
+            //listeMessages->append("Present.");
+            // Refresh timeout du client trouvé
+            (*pClient).timeOut = QTime::currentTime();
+            (*pClient).state = b;
+
+            if((*pClient).alive == 0)
+            {
+                (*pClient).alive = 1; // Statut = alive
+
+                // Ajout dans la combobox
+                comboBoxSelection->addItem(client->hostPort);
+
                 listeMessages->append((*pClient).hostPort + " retrouve.");
-             }
-         }
-     }
+            }
+        }
+    }
+    refreshButtons(comboBoxSelection->currentIndex());
 }
 
 
@@ -121,44 +139,76 @@ Client * Serveur::clientIsIn(Client *client, QList<Client *> &clients)
 
 /* Affiche les clients contenu dans la liste du serveur
  *  */
-void Serveur::whoIsAlive()
+void Serveur::clientsState()
 {
+    QList<Client *> listAlive = clientsAlive();
+    QList<Client *> listDead = clientsDead();
+
     listeMessages->append("");
+
     listeMessages->append("Are alive on this server :");
-
-    for(QList<Client *>::Iterator clientIterator = clients.begin(); clientIterator != clients.end(); ++clientIterator )
+    listeMessages->append("   Etat collectif des alive: " + QString::number(checkClientsState(clients)));
+    for(QList<Client *>::Iterator clientIterator = listAlive.begin(); clientIterator != listAlive.end(); ++clientIterator )
     {
-
-        if( (*clientIterator)->status != 0 )
             listeMessages->append("\t" + (*clientIterator)->hostPort
-                              + "  status: " + QString::number((*clientIterator)->status)
-                              + "  timeOut: " + (*clientIterator)->timeOut.toString() + "s.");
+                                  + "  alive: " + QString::number((*clientIterator)->alive)
+                                  + "  state: " + QString::number((*clientIterator)->state)
+                                  + "  timeOut: " + (*clientIterator)->timeOut.toString() + "s.");
     }
     listeMessages->append("");
 
     listeMessages->append("Are dead on this server :");
-    for(QList<Client *>::Iterator clientIterator = clients.begin(); clientIterator != clients.end(); ++clientIterator )
+    for(QList<Client *>::Iterator clientIterator = listDead.begin(); clientIterator != listDead.end(); ++clientIterator )
     {
-
-        if( (*clientIterator)->status == 0 )
             listeMessages->append("\t" + (*clientIterator)->hostPort
-                              + "  status: " + QString::number((*clientIterator)->status)
+                                  + "  alive: " + QString::number((*clientIterator)->alive)
+                                  + "  state: " + QString::number((*clientIterator)->state)
                               + "  timeOut: " + (*clientIterator)->timeOut.toString() + "s.");
     }
     listeMessages->append("");
 }
 
 
+/* Renvoie la liste des clients "Alive"
+ * */
+QList<Client *> Serveur::clientsAlive()
+{
+    QList<Client *> listAlive;
+
+    for(QList<Client *>::Iterator clientIterator = clients.begin(); clientIterator != clients.end(); ++clientIterator )
+        if( (*clientIterator)->alive ) listAlive << *clientIterator;
+
+    return listAlive;
+}
+
+
+
+/* Renvoie la liste des clients "Dead"
+ * */
+QList<Client *> Serveur::clientsDead()
+{
+    QList<Client *> listDead;
+
+    for(QList<Client *>::Iterator clientIterator = clients.begin(); clientIterator != clients.end(); ++clientIterator )
+        if( !(*clientIterator)->alive ) listDead << *clientIterator;
+
+    return listDead;
+}
+
+
 
 /* Actualisation des statuts des clients
+ * Actualise la combobox
  * */
 void Serveur::deadCollector()
 {
     for(QList<Client *>::Iterator clientIterator = clients.begin(); clientIterator != clients.end(); ++clientIterator )
-        if( (*clientIterator)->status != 0 )
+        if( (*clientIterator)->alive != 0 )
             if( (*clientIterator)->timeOut < QTime::currentTime().addSecs(-3))
             {
-                (*clientIterator)->status = 0;
+                (*clientIterator)->alive = 0;
+                // Suppresion de l'entrée dans la combobox
+                comboBoxSelection->removeItem(comboBoxSelection->findText((*clientIterator)->hostPort));
                 listeMessages->append("\t" + (*clientIterator)->hostPort + " is dead !");
             }
 }
@@ -195,7 +245,6 @@ void Serveur::connectTo(Client *client)
 
         client->toClient->connectToHost(client->getHost(), client->getPort()); // On se connecte au serveur demandé
         client->toClient->waitForConnected();
-        client->status = 2;
         listeMessages->append("    Connecte a " + client->hostPort);
         connect(client->toClient, SIGNAL(readyRead()), this, SLOT(receptionClient()));
         connect(client->toClient, SIGNAL(disconnected()), this, SLOT(deconnexionClient()));
@@ -216,7 +265,6 @@ void Serveur::deconnexionClient()
     foreach(Client *c, clients)
         if( c->toClient == socket )
         {
-            c->status = 1;
             c->toClient->close();
             c->toClient->deleteLater();
             listeMessages->append("    /!\\" + c->hostPort + " vient de se deconnecter.");
@@ -226,37 +274,43 @@ void Serveur::deconnexionClient()
 
 
 
-/* Envoi d'un message a tous les clients
+
+/* Envoi d'un ordre a tous les clients
  * */
-void Serveur::envoyerTousClients(int pOrdre)
+void Serveur::envoyerOrdre(int pOrdre)
 {
-    switch (pOrdre)
+    Ordre ordre = (Ordre)pOrdre;
+    QList<Client *> listAlive;
+    int ccs = -1, index = comboBoxSelection->currentIndex();
+
+    if( index == 0 )
     {
-        case 0:
-            boutonStart->setEnabled(false);
-            boutonPause->setEnabled(true);
-            boutonStop->setEnabled(true);
-            break;
+        listAlive = clientsAlive();
+        ccs = checkClientsState(listAlive);
+        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a tous les clients ALIVE.");
+    }
+    else
+    {
+        QList<Client *>::Iterator clientIterator = clients.begin();
+        while( (*clientIterator)->hostPort != comboBoxSelection->itemText(index))
+            ++clientIterator;
 
-        case 1:
-            boutonStart->setEnabled(false);
-            boutonPause->setEnabled(true);
-            boutonStop->setEnabled(true);
-            break;
+        listAlive.append(*clientIterator);
+        ccs = (*clientIterator)->state;
+        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a " + (*clientIterator)->hostPort);
+    }
 
-        case 2:
-            boutonStart->setEnabled(true);
-            boutonPause->setEnabled(false);
-            boutonStop->setEnabled(false);
-            break;
+    // Si les clients sont dans un etat incoherent
+    if( pOrdre != ccs )
+    {
+        listeMessages->append("L'etat des clients alive est incoherent, tous vont etre STOP.");
+        ordre = STOP;
     }
 
 
     // Préparation du paquet
     QByteArray paquet;
     QDataStream out(&paquet, QIODevice::WriteOnly);
-
-    Ordre ordre = (Ordre)pOrdre;
 
     out << (quint16) 0; // On écrit 0 au début du paquet pour réserver la place pour écrire la taille
     out << hostPort << QTime::currentTime() << ordre;
@@ -265,14 +319,73 @@ void Serveur::envoyerTousClients(int pOrdre)
 
 
     // Envoi du paquet préparé à tous les clients connectés au serveur
-    for (int i = 0; i < clients.size(); i++)
-    {
-        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a : " + clients[i]->hostPort);
-        clients[i]->toClient->write(paquet);
-    }
-
+    for(QList<Client *>::Iterator clientIterator = listAlive.begin(); clientIterator != listAlive.end(); ++clientIterator )
+        (*clientIterator)->toClient->write(paquet);
 }
 
+
+
+/* Vérifie l'etat des clients alive
+ * Renvoie 0 s'ils sont tous STOP
+ *         1 s'ils sont tous START
+ *         -1 si pas dans le meme etat
+ * */
+int Serveur::checkClientsState(QList<Client *> listeClients)
+{
+    int res = -1;
+
+    if( listeClients.size() > 0 )
+    {
+        int b = 0;
+
+        for (int i = 0; i < listeClients.size(); i++)
+        {
+            b += listeClients[i]->state;
+        }
+
+        if(b == 0) res = 0;
+        if(b == listeClients.size()) res = 1;
+    }
+
+    return res;
+}
+
+
+/* Rafraichit l'affichage des boutons START / STOP
+ * */
+void Serveur::refreshButtons(int index)
+{
+    int ccs = -1;
+
+    if( index == 0 )
+        ccs = checkClientsState(clientsAlive());
+    else
+    {
+        QList<Client *>::Iterator clientIterator = clients.begin();
+        while( (*clientIterator)->hostPort != comboBoxSelection->itemText(index))
+            ++clientIterator;
+        ccs = (*clientIterator)->state;
+    }
+
+    // Tous STOP
+    if( ccs == 0 )
+    {
+            boutonStart->setEnabled(true);
+            boutonStop->setEnabled(false);
+    }
+    // Tous START
+    else if ( ccs == 1 )
+    {
+            boutonStart->setEnabled(false);
+            boutonStop->setEnabled(true);
+    }
+    //Etat incoherent
+    else
+    {
+            boutonStart->setEnabled(true);
+            boutonStop->setEnabled(true);
+    }
+}
 
 
 /* Reception de données provenant d'un client

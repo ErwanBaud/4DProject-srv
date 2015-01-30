@@ -16,44 +16,51 @@ class Serveur : public QWidget, private Ui::Serveur
 
         enum Ordre
         {
-            START,
-            PAUSE,
+            START = 0,
             STOP
         };
 
         Serveur();
-        QString hostPort; // Identité du serveur
-        QList<Client *> clients; // Liste des processus clients
-
-        Client *clientIsIn(Client *client, QList<Client *> &clients); // Vérifie la présence d'un client dans la liste
         //void envoyerATous(const QString &message);
         //void envoyerAuxAutres(const QString &message);
-
-    private slots:
-        void clientAlive(); // Slot executé lors de la reception d'un iamAlive
-        void whoIsAlive(); // Slot executé lors d'un clic sur le bouton whoIsAlive
-        void deadCollector(); // Slot executé périodiquement pour modifier le statut des processus client n'emettant plus
-
-        void startClient(); // Slot executé lors d'un clic sur le bouton lancer
-        void deconnexionClient(); // Slot executé lors de la deconnexion de la socket d'un client
-
-        void envoyerTousClients(int); // Envoi d'un message a tous les client connectes
-        void receptionClient(); // Slot executé lors de la reception de données provenant d'un client
 
     private:
 
         QHostAddress host; // Adresse IP du serveur
         quint16 port; // Port du serveur
         quint16 appPort; // Port de l'appli
+        QString hostPort; // Identité du serveur
 
-        QSignalMapper *signalMapper;
-
-        QTimer *tDeadCollector; // timer pour le slot deadCollector
-
+        QList<Client *> clients; // Liste des processus clients
         QUdpSocket *udpBroadSocket; // Socket d'ecoute des broadcasts iamAlive
         quint16 tailleMessage;
 
+        Client *clientIsIn(Client *client, QList<Client *> &clients); // Vérifie la présence d'un client dans la liste
         void connectTo(Client *client);
+
+        QList<Client *> clientsAlive();
+        QList<Client *> clientsDead();
+
+        int checkClientsState(QList<Client *> listeClients); // Vérifie l'etat des clients connectés
+
+        QSignalMapper *signalMapper; // SignalMapper pour les boutons Start / Stop
+
+        QTimer *tDeadCollector; // timer pour le slot deadCollector
+
+
+    private slots:
+
+        void receptionBroadcast(); // Slot executé lors de la reception d'un iamAlive
+        void clientsState(); // Slot executé lors d'un clic sur le bouton State
+        void deadCollector(); // Slot executé périodiquement pour modifier le statut des processus client n'emettant plus
+
+        void startClient(); // Slot executé lors d'un clic sur le bouton lancer
+        void deconnexionClient(); // Slot executé lors de la deconnexion de la socket d'un client
+
+        void envoyerOrdre(int); // Envoi d'un ordre a un ou plusieurs client connecte
+        void receptionClient(); // Slot executé lors de la reception de données provenant d'un client
+
+        void refreshButtons(int index);
 };
 
 #endif

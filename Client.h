@@ -12,29 +12,26 @@ class Client
 
         enum Ordre
         {
-            START,
-            PAUSE,
+            START = 0,
             STOP
         };
 
         Client();
         Client(QString h, QString p);
 
-        QString hostPort; // Identité du client
-        quint16 status; // Statut :
-                        // 0 -> dead
-                        // 1 -> alive
-                        // 2 -> connected
-
-
-        QTime timeOut;  // timeout pour gèrer les deconnexions
-
         QHostAddress getHost();
         quint16 getPort();
         void setHost(QString h);
         void setPort(QString p);
 
+        QString hostPort; // Identité du client
+
+        bool alive; // Broadcast reçus (true) ou non (false)
+        bool state; // Simu lancée (true) ou non (false)
+
         QTcpSocket *toClient; // Socket de communication vers le processus client
+
+        QTime timeOut;  // timeout pour gèrer les deconnexions
 
     private:
         QHostAddress host; // Adresse IP du client

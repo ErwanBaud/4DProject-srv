@@ -9,7 +9,9 @@ Client::Client(QString h, QString p)
     hostPort = host.toString() + ":" + QString::number(port);
 
     toClient = new QTcpSocket();
-    status = 0;
+
+    alive = false;
+    state = false;
 }
 
 QHostAddress Client::getHost()
@@ -32,7 +34,6 @@ void Client::setPort(QString p)
     if (!p.isEmpty()) port = p.toUShort();
 }
 
-
 bool operator==(const Client client1, const Client client2)
 {
     bool r = false;
@@ -40,14 +41,12 @@ bool operator==(const Client client1, const Client client2)
     return r;
 }
 
-
 bool operator==(const Client client1, const Client *clientIterator)
 {
     bool r = false;
     if(client1.hostPort.compare((*clientIterator).hostPort) == 0) r = true;
     return r;
 }
-
 
 uint qHash(const Client &c)
 {
