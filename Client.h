@@ -29,9 +29,9 @@ class Client
         bool alive; // Broadcast reçus (true) ou non (false)
         bool state; // Simu lancée (true) ou non (false)
 
-        QTcpSocket *toClient; // Socket de communication vers le processus client
+        QSslSocket *toClient; // Socket de communication vers le processus client
 
-        QTime timeOut;  // timeout pour gèrer les deconnexions
+        QTime timeStamp;  // timeout pour gèrer les deconnexions
 
     private:
         QHostAddress host; // Adresse IP du client

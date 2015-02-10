@@ -8,7 +8,7 @@ Client::Client(QString h, QString p)
     setPort(p);
     hostPort = host.toString() + ":" + QString::number(port);
 
-    toClient = new QTcpSocket();
+    toClient = new QSslSocket();
 
     alive = false;
     state = false;
