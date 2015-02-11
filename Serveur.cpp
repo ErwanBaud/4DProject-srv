@@ -1,4 +1,5 @@
 #include "Serveur.h"
+#include "ssh2_exec.h"
 
 #define timeOut 3
 
@@ -25,7 +26,7 @@ Serveur::Serveur()
 
     connect(signalMapper, SIGNAL(mapped(int)), this, SLOT(envoyerOrdre(int)));
 
-    comboBoxSelection->InsertAlphabetically;
+    //comboBoxSelection->InsertAlphabetically;
     comboBoxSelection->setMinimumWidth(110);
     comboBoxSelection->addItem("All");
     connect(comboBoxSelection , SIGNAL(currentIndexChanged(int)), this, SLOT(refreshButtons(int)));
@@ -252,8 +253,8 @@ void Serveur::deadCollector()
  *  */
 void Serveur::startClient()
 {    
-    QString program = QDir::home().filePath("4DProject/deploy/cltCore.exe");
-    QProcess *myProcess = new QProcess(this);
+    //QString program = QDir::home().filePath("4DProject/deploy/cltCore.exe");
+    /*QProcess *myProcess = new QProcess(this);
     if(myProcess->startDetached(program))
     {
         listeMessages->append("");
@@ -265,7 +266,21 @@ void Serveur::startClient()
         listeMessages->append("");
         listeMessages->append("Client non démarré !");
         listeMessages->append("");
+    }*/
+    if(!ssh_exec_command("127.0.0.1","projet4d","nohup 4DProject/deploy/cltCore.exe  > /dev/null 2> /dev/null </dev/null &"))
+    {
+        listeMessages->append("");
+        listeMessages->append("Client démarré !");
+        listeMessages->append("");
     }
+    else
+    {
+        listeMessages->append("");
+        listeMessages->append("Client non démarré !");
+        listeMessages->append("");
+    }
+
+
 }
 
 
