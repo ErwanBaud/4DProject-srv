@@ -13,7 +13,8 @@ class Client
         enum Ordre
         {
             START = 0,
-            STOP
+            STOP,
+            EXIT
         };
 
         Client();

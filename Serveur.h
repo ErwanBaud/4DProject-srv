@@ -16,7 +16,8 @@ class Serveur : public QWidget, private Ui::Serveur
         enum Ordre
         {
             START = 0,
-            STOP
+            STOP,
+            EXIT
         };
 
         Serveur();
@@ -59,6 +60,7 @@ class Serveur : public QWidget, private Ui::Serveur
         void envoyerOrdre(int); // Envoi d'un ordre a un ou plusieurs client connecte
         void receptionClient(); // Slot executé lors de la reception de données provenant d'un client
 
+        void writeLog(QString sender, QString log);
         void refreshButtons(int index);
 };
 

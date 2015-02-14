@@ -11,6 +11,7 @@ Serveur::Serveur()
 
     boutonStart->setEnabled(false);
     boutonStop->setEnabled(false);
+    boutonExit->setEnabled(false);
 
     signalMapper = new QSignalMapper(this);
 
@@ -19,10 +20,12 @@ Serveur::Serveur()
     connect(boutonLancer, SIGNAL(clicked()), this, SLOT(startClient()));
 
     connect(boutonStart, SIGNAL(clicked()), signalMapper, SLOT(map()));
-    signalMapper->setMapping(boutonStart, START);
     connect(boutonStop, SIGNAL(clicked()), signalMapper, SLOT(map()));
-    signalMapper->setMapping(boutonStop, STOP);
+    connect(boutonExit, SIGNAL(clicked()), signalMapper, SLOT(map()));
 
+    signalMapper->setMapping(boutonStart, START);
+    signalMapper->setMapping(boutonStop, STOP);
+    signalMapper->setMapping(boutonExit, EXIT);
     connect(signalMapper, SIGNAL(mapped(int)), this, SLOT(envoyerOrdre(int)));
 
     comboBoxSelection->InsertAlphabetically;
@@ -180,13 +183,15 @@ void Serveur::clientsState()
 /* Vérifie l'etat des clients alive
  * Renvoie 0 s'ils sont tous STOP
  *         1 s'ils sont tous START
+ *         2 s'il n'y a aucun client
  *         -1 si pas dans le meme etat
  * */
 int Serveur::checkClientsState(QList<Client *> listeClients)
 {
     int res = -1;
 
-    if( listeClients.size() > 0 )
+    if( listeClients.size() == 0 ) res = 2;
+    else
     {
         int b = 0;
 
@@ -243,6 +248,8 @@ void Serveur::deadCollector()
                 comboBoxSelection->removeItem(comboBoxSelection->findText((*clientIterator)->hostPort));
                 listeMessages->append("\t" + (*clientIterator)->hostPort + " is dead !");
             }
+
+    refreshButtons(0);
 }
 
 
@@ -275,7 +282,7 @@ void Serveur::connectTo(Client *client)
 {
     listeMessages->append("    Tentative de connexion a " + client->hostPort);
 
-    connect(client->toClient, SIGNAL(readyRead()), this, SLOT(receptionClient()));
+    connect(client->toClient, SIGNAL(readyRead()), this, SLOT(receptionClient()), Qt::QueuedConnection);
     connect(client->toClient, SIGNAL(disconnected()), this, SLOT(deconnexionClient()));
 
 
@@ -333,6 +340,7 @@ void Serveur::deconnexionClient()
 
 
     foreach(Client *c, clients)
+    {
         if( c->toClient == socket )
         {
             c->toClient->close();
@@ -340,6 +348,7 @@ void Serveur::deconnexionClient()
             listeMessages->append("    /!\\" + c->hostPort + " vient de se deconnecter.");
             break;
         }
+    }
 }
 
 
@@ -349,15 +358,16 @@ void Serveur::deconnexionClient()
  * */
 void Serveur::envoyerOrdre(int pOrdre)
 {
-    Ordre ordre = (Ordre)pOrdre;
+    //Ordre ordre = (Ordre)pOrdre;
     QList<Client *> listAlive;
+    QString client;
+
     int ccs = -1, index = comboBoxSelection->currentIndex();
 
     if( index == 0 )
     {
         listAlive = clientsAlive();
         ccs = checkClientsState(listAlive);
-        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a tous les clients ALIVE.");
     }
     else
     {
@@ -367,14 +377,23 @@ void Serveur::envoyerOrdre(int pOrdre)
 
         listAlive.append(*clientIterator);
         ccs = (*clientIterator)->state;
-        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a " + (*clientIterator)->hostPort);
+        client = (*clientIterator)->hostPort;
     }
 
     // Si les clients sont dans un etat incoherent
-    if( pOrdre != ccs )
+    if( ccs == 2 )
+    {
+        listeMessages->append("Aucun client présent.");
+        return;
+    }
+    else if( pOrdre == 2 )
+    {
+        listeMessages->append("Les clients vont etre EXIT.");
+    }
+    else if( pOrdre != ccs )
     {
         listeMessages->append("L'etat des clients alive est incoherent, tous vont etre STOP.");
-        ordre = STOP;
+        pOrdre = STOP;
     }
 
 
@@ -383,7 +402,7 @@ void Serveur::envoyerOrdre(int pOrdre)
     QDataStream out(&paquet, QIODevice::WriteOnly);
 
     out << (quint16) 0; // On écrit 0 au début du paquet pour réserver la place pour écrire la taille
-    out << hostPort << QTime::currentTime() << ordre;
+    out << hostPort << QTime::currentTime() << pOrdre;
     out.device()->seek(0); // On se replace au début du paquet
     out << (quint16) (paquet.size() - sizeof(quint16)); // On écrase le 0 qu'on avait réservé par la longueur du message
 
@@ -391,6 +410,15 @@ void Serveur::envoyerOrdre(int pOrdre)
     // Envoi du paquet préparé à tous les clients connectés au serveur
     for(QList<Client *>::Iterator clientIterator = listAlive.begin(); clientIterator != listAlive.end(); ++clientIterator )
         (*clientIterator)->toClient->write(paquet);
+
+    if( index == 0 )
+    {
+        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a tous les clients ALIVE.");
+    }
+    else
+    {
+        listeMessages->append("Envoye ordre " + QString::number(pOrdre) + " a " + client);
+    }
 }
 
 
@@ -425,12 +453,33 @@ void Serveur::receptionClient()
     in >> time;
     in >> messageRecu;
 
-    listeMessages->append(time.toString() + " - Recu de " + sender + " : " + messageRecu);
+    listeMessages->append("");
+    listeMessages->append(time.toString() + " - Recu LOG de " + sender + " : " + messageRecu);
+
+    writeLog(sender, messageRecu);
 
     // 3 : remise de la taille du message à 0 pour permettre la réception des futurs messages
     tailleMessage = 0;
 }
 
+/* Enregistrement des logs recu dans des fichiers
+ * */
+void Serveur::writeLog(QString sender, QString log)
+{
+    sender.replace(".", "_");
+    sender.replace(":", "_");
+
+    QString filename = QDir::home().filePath("4DProject/log/hyp/" + sender + "_" + QDate::currentDate().toString(Qt::ISODate) + ".txt");
+    QFile file( filename );
+    if ( file.open(QIODevice::ReadWrite) )
+    {
+        QTextStream stream( &file );
+        stream << log << endl;
+        file.close();
+    }
+
+    listeMessages->append("*** Received log saved to " + filename + " ***");
+}
 
 
 /*****  Interface   *****/
@@ -457,17 +506,27 @@ void Serveur::refreshButtons(int index)
     {
             boutonStart->setEnabled(true);
             boutonStop->setEnabled(false);
+            boutonExit->setEnabled(true);
     }
     // Tous START
     else if ( ccs == 1 )
     {
             boutonStart->setEnabled(false);
             boutonStop->setEnabled(true);
+            boutonExit->setEnabled(true);
+    }
+    // Aucun
+    else if ( ccs == 2 )
+    {
+            boutonStart->setEnabled(false);
+            boutonStop->setEnabled(false);
+            boutonExit->setEnabled(false);
     }
     //Etat incoherent
     else
     {
             boutonStart->setEnabled(true);
             boutonStop->setEnabled(true);
+            boutonExit->setEnabled(true);
     }
 }
