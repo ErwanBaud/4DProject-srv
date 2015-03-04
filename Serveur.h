@@ -6,6 +6,7 @@
 #include <QSignalMapper>
 #include "ui_Serveur.h"
 #include "Client.h"
+#include "ssh2_exec.h"
 
 class Serveur : public QWidget, private Ui::Serveur
 {

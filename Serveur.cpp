@@ -258,7 +258,7 @@ void Serveur::deadCollector()
 /* Lance un client sur 127.0.0.1 et un port aléatoire
  *  */
 void Serveur::startClient()
-{    
+{
     QString program = QDir::home().filePath("4DProject/deploy/cltCore.exe");
     QProcess *myProcess = new QProcess(this);
     if(myProcess->startDetached(program))
@@ -272,7 +272,21 @@ void Serveur::startClient()
         listeMessages->append("");
         listeMessages->append("Client non démarré !");
         listeMessages->append("");
+    }/*
+    if(!ssh_exec_command("127.0.0.1","projet4d","nohup 4DProject/deploy/cltCore.exe  > /dev/null 2> /dev/null </dev/null &"))
+    {
+        listeMessages->append("");
+        listeMessages->append("Client démarré !");
+        listeMessages->append("");
     }
+    else
+    {
+        listeMessages->append("");
+        listeMessages->append("Client non démarré !");
+        listeMessages->append("");
+    }
+    */
+
 }
 
 
